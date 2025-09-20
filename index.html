@@ -242,17 +242,25 @@
                     <p><span class="font-semibold">Address:</span> ${job.address}</p>
                 </div>
                 <div class="text-sm mt-4">
+                    <p><span class="font-semibold">Time Started:</span> ${job.timeStarted ? formatTimestamp(job.timeStarted) : 'N/A'}</p>
+                    <p><span class="font-semibold">Time Completed:</span> ${job.timeCompleted ? formatTimestamp(job.timeCompleted) : 'N/A'}</p>
                     <span class="font-semibold">Status History:</span>
                     ${statusUpdatesHtml}
                 </div>
-                <div class="flex mt-4 space-x-2">
+                <div class="flex mt-4 space-x-2 flex-wrap gap-2">
                     <select class="status-select bg-gray-200 text-gray-700 py-1 px-2 rounded-lg text-sm font-medium focus:ring-blue-500 focus:border-blue-500">
                         <option value="outstanding" ${job.status === 'outstanding' ? 'selected' : ''}>Outstanding</option>
                         <option value="in-process" ${job.status === 'in-process' ? 'selected' : ''}>In Process</option>
                         <option value="complete" ${job.status === 'complete' ? 'selected' : ''}>Complete</option>
                     </select>
-                     <button class="edit-btn bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1 px-2 rounded-lg text-sm transition-colors duration-300">
+                    <button class="edit-btn bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1 px-2 rounded-lg text-sm transition-colors duration-300">
                         Edit
+                    </button>
+                    <button class="start-btn bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1 px-2 rounded-lg text-sm transition-colors duration-300 ${job.timeStarted ? 'opacity-50 cursor-not-allowed' : ''}" ${job.timeStarted ? 'disabled' : ''}>
+                        Start Job
+                    </button>
+                    <button class="complete-btn bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-2 rounded-lg text-sm transition-colors duration-300 ${job.timeCompleted ? 'opacity-50 cursor-not-allowed' : ''}" ${job.timeCompleted ? 'disabled' : ''}>
+                        Complete Job
                     </button>
                 </div>
             `;
@@ -366,6 +374,23 @@
             }
         }
 
+        async function updateJobTime(jobId, timeField) {
+            if (!authReady) {
+                showMessageModal("Application is not authenticated. Please wait and try again.");
+                return;
+            }
+            try {
+                const jobDocRef = doc(db, `artifacts/${appId}/public/data/jobs`, jobId);
+                const updateData = {};
+                updateData[timeField] = Timestamp.now();
+                await updateDoc(jobDocRef, updateData);
+                console.log(`Time field '${timeField}' updated for job: ${jobId}`);
+            } catch (e) {
+                console.error("Error updating time:", e);
+                showMessageModal("Failed to update job time. Please try again.");
+            }
+        }
+
         // Event Listeners
         addJobBtn.addEventListener('click', () => {
             jobIdInput.value = '';
@@ -392,7 +417,9 @@
                 contactName: contactNameInput.value,
                 contactNumber: contactNumberInput.value,
                 email: emailInput.value,
-                address: addressInput.value
+                address: addressInput.value,
+                timeStarted: null,
+                timeCompleted: null
             };
 
             const jobId = jobIdInput.value;
@@ -430,6 +457,15 @@
                 } else {
                     showMessageModal("Job not found.");
                 }
+            }
+
+            // Time tracking buttons
+            if (e.target.classList.contains('start-btn')) {
+                const jobId = e.target.closest('[data-id]').dataset.id;
+                updateJobTime(jobId, 'timeStarted');
+            } else if (e.target.classList.contains('complete-btn')) {
+                const jobId = e.target.closest('[data-id]').dataset.id;
+                updateJobTime(jobId, 'timeCompleted');
             }
         });
 
