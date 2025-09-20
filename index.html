@@ -251,6 +251,9 @@
                         <option value="in-process" ${job.status === 'in-process' ? 'selected' : ''}>In Process</option>
                         <option value="complete" ${job.status === 'complete' ? 'selected' : ''}>Complete</option>
                     </select>
+                     <button class="edit-btn bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1 px-2 rounded-lg text-sm transition-colors duration-300">
+                        Edit
+                    </button>
                 </div>
             `;
             return card;
@@ -365,6 +368,7 @@
 
         // Event Listeners
         addJobBtn.addEventListener('click', () => {
+            jobIdInput.value = '';
             showModal('Add New Job');
         });
 
@@ -388,15 +392,45 @@
                 contactName: contactNameInput.value,
                 contactNumber: contactNumberInput.value,
                 email: emailInput.value,
-                address: addressInput.value,
-                status: 'outstanding',
-                statusHistory: [{
-                    status: 'outstanding',
-                    timestamp: Timestamp.now()
-                }]
+                address: addressInput.value
             };
 
-            saveJob(newJob);
+            const jobId = jobIdInput.value;
+
+            if (jobId) {
+                saveJob(newJob, jobId);
+            } else {
+                newJob.status = 'outstanding';
+                newJob.statusHistory = [{
+                    status: 'outstanding',
+                    timestamp: Timestamp.now()
+                }];
+                saveJob(newJob);
+            }
+        });
+
+        jobsContainer.addEventListener('click', async (e) => {
+            // Edit Button functionality
+            if (e.target.classList.contains('edit-btn')) {
+                const jobId = e.target.closest('[data-id]').dataset.id;
+                const jobDocRef = doc(db, `artifacts/${appId}/public/data/jobs`, jobId);
+                const jobDoc = await getDoc(jobDocRef);
+
+                if (jobDoc.exists()) {
+                    const jobData = jobDoc.data();
+                    jobIdInput.value = jobId;
+                    dueDateInput.value = jobData.dueDate;
+                    descriptionInput.value = jobData.description;
+                    assigneeInput.value = jobData.assignee;
+                    contactNameInput.value = jobData.contactName;
+                    contactNumberInput.value = jobData.contactNumber;
+                    emailInput.value = jobData.email;
+                    addressInput.value = jobData.address;
+                    showModal('Edit Job');
+                } else {
+                    showMessageModal("Job not found.");
+                }
+            }
         });
 
         jobsContainer.addEventListener('change', (e) => {
