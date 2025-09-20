@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electrical Job Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js" type="module"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 flex flex-col items-center">
+
+    <!-- Main Application Container -->
+    <div class="w-full max-w-7xl mx-auto space-y-6">
+
+        <!-- Header -->
+        <header class="bg-white rounded-xl shadow-lg p-6 flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
+            <h1 class="text-3xl font-bold text-gray-800">Job Dashboard</h1>
+            <div id="auth-status" class="text-gray-500 text-sm">
+                <span id="user-id-display" class="font-medium">Loading user...</span>
+            </div>
+            <button id="add-job-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-colors duration-300">
+                + Add New Job
+            </button>
+        </header>
+
+        <!-- Job List Container -->
+        <div id="jobs-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Job cards will be dynamically inserted here -->
+        </div>
+
+        <!-- Add/Edit Job Modal -->
+        <div id="modal-backdrop" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center transition-opacity duration-300 opacity-0">
+            <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl transform scale-95 transition-transform duration-300">
+                <h2 id="modal-title" class="text-2xl font-bold mb-4 text-gray-800">Add New Job</h2>
+                <form id="job-form" class="space-y-4">
+                    <input type="hidden" id="job-id-input">
+
+                    <div>
+                        <label for="due-date-input" class="block text-sm font-medium text-gray-700">Due Date</label>
+                        <input type="date" id="due-date-input" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+
+                    <div>
+                        <label for="description-input" class="block text-sm font-medium text-gray-700">Description</label>
+                        <textarea id="description-input" rows="3" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"></textarea>
+                    </div>
+
+                    <div>
+                        <label for="assignee-input" class="block text-sm font-medium text-gray-700">Assign to</label>
+                        <select id="assignee-input" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="" disabled selected>Select a person</option>
+                            <option value="Drew">Drew</option>
+                            <option value="Carl">Carl</option>
+                            <option value="Harry">Harry</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="contact-name-input" class="block text-sm font-medium text-gray-700">Contact Name</label>
+                        <input type="text" id="contact-name-input" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+
+                    <div>
+                        <label for="contact-number-input" class="block text-sm font-medium text-gray-700">Contact Number</label>
+                        <input type="tel" id="contact-number-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+
+                    <div>
+                        <label for="email-input" class="block text-sm font-medium text-gray-700">Email Address</label>
+                        <input type="email" id="email-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+
+                    <div>
+                        <label for="address-input" class="block text-sm font-medium text-gray-700">Address</label>
+                        <input type="text" id="address-input" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+
+                    <div class="flex justify-end space-x-2">
+                        <button type="button" id="close-modal-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg transition-colors duration-300">
+                            Cancel
+                        </button>
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-colors duration-300">
+                            Save Job
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Alert/Message Modal -->
+        <div id="message-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center transition-opacity duration-300 opacity-0">
+            <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
+                <p id="message-text" class="text-center text-gray-800 font-medium"></p>
+                <div class="mt-4 text-center">
+                    <button id="close-message-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-300">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, setDoc, onSnapshot, collection, query, where, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Initialization and Authentication
+        setLogLevel('Debug');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+
+        let app;
+        let db;
+        let auth;
+        let userId = null;
+
+        let authReady = false;
+
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    document.getElementById('user-id-display').textContent = `User ID: ${userId}`;
+                    authReady = true;
+                    startRealtimeListener();
+                } else {
+                    console.log('User is signed out.');
+                    // Try to sign in anonymously or with custom token if available
+                    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Error signing in:", error);
+                        showMessageModal("Authentication failed. Please refresh the page.");
+                    }
+                }
+            });
+        } catch (e) {
+            console.error("Error initializing Firebase:", e);
+            showMessageModal("Failed to initialize the application. Please check the console for details.");
+        }
+
+
+        // UI Elements
+        const addJobBtn = document.getElementById('add-job-btn');
+        const modalBackdrop = document.getElementById('modal-backdrop');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const jobForm = document.getElementById('job-form');
+        const jobsContainer = document.getElementById('jobs-container');
+        const modalTitle = document.getElementById('modal-title');
+        const jobIdInput = document.getElementById('job-id-input');
+        const messageModal = document.getElementById('message-modal');
+        const messageText = document.getElementById('message-text');
+        const closeMessageBtn = document.getElementById('close-message-btn');
+
+        // Form Inputs
+        const dueDateInput = document.getElementById('due-date-input');
+        const descriptionInput = document.getElementById('description-input');
+        const assigneeInput = document.getElementById('assignee-input');
+        const contactNameInput = document.getElementById('contact-name-input');
+        const contactNumberInput = document.getElementById('contact-number-input');
+        const emailInput = document.getElementById('email-input');
+        const addressInput = document.getElementById('address-input');
+
+        // Helper Functions
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'N/A';
+            const date = timestamp.toDate();
+            const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+            return date.toLocaleString('en-US', options);
+        }
+
+        function showModal(title) {
+            modalTitle.textContent = title;
+            modalBackdrop.classList.remove('hidden', 'opacity-0');
+            modalBackdrop.classList.add('flex', 'opacity-100');
+        }
+
+        function hideModal() {
+            modalBackdrop.classList.remove('flex', 'opacity-100');
+            modalBackdrop.classList.add('hidden', 'opacity-0');
+            jobForm.reset();
+            jobIdInput.value = '';
+        }
+
+        function showMessageModal(message) {
+            messageText.textContent = message;
+            messageModal.classList.remove('hidden', 'opacity-0');
+            messageModal.classList.add('flex', 'opacity-100');
+        }
+
+        function hideMessageModal() {
+            messageModal.classList.remove('flex', 'opacity-100');
+            messageModal.classList.add('hidden', 'opacity-0');
+        }
+
+        function createJobCard(job) {
+            const card = document.createElement('div');
+            card.className = 'bg-white rounded-xl shadow-md p-6 border-l-4 ' + getStatusColorClass(job.status);
+            card.dataset.id = job.id;
+
+            const statusUpdatesHtml = job.statusHistory.map(history => {
+                const timestamp = formatTimestamp(history.timestamp);
+                return `<p class="text-xs text-gray-500 mt-1">${timestamp}: ${history.status}</p>`;
+            }).join('');
+
+            card.innerHTML = `
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                    <h3 class="text-xl font-bold text-gray-800">${job.assignee}</h3>
+                    <span class="px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadgeClass(job.status)}">
+                        ${job.status}
+                    </span>
+                </div>
+                <p class="text-sm text-gray-500 mb-2">Due: ${job.dueDate}</p>
+                <div class="space-y-3 text-gray-600 text-sm mb-4">
+                    <p class="font-semibold">Description:</p>
+                    <p class="text-gray-700">${job.description}</p>
+                    <hr class="border-gray-200">
+                    <p><span class="font-semibold">Contact:</span> ${job.contactName}</p>
+                    <p><span class="font-semibold">Phone:</span> ${job.contactNumber || 'N/A'}</p>
+                    <p><span class="font-semibold">Email:</span> ${job.email || 'N/A'}</p>
+                    <p><span class="font-semibold">Address:</span> ${job.address}</p>
+                </div>
+                <div class="text-sm mt-4">
+                    <span class="font-semibold">Status History:</span>
+                    ${statusUpdatesHtml}
+                </div>
+                <div class="flex mt-4 space-x-2">
+                    <select class="status-select bg-gray-200 text-gray-700 py-1 px-2 rounded-lg text-sm font-medium focus:ring-blue-500 focus:border-blue-500">
+                        <option value="outstanding" ${job.status === 'outstanding' ? 'selected' : ''}>Outstanding</option>
+                        <option value="in-process" ${job.status === 'in-process' ? 'selected' : ''}>In Process</option>
+                        <option value="complete" ${job.status === 'complete' ? 'selected' : ''}>Complete</option>
+                    </select>
+                </div>
+            `;
+            return card;
+        }
+
+        function getStatusColorClass(status) {
+            switch (status) {
+                case 'outstanding': return 'border-orange-500';
+                case 'in-process': return 'border-blue-500';
+                case 'complete': return 'border-green-500';
+                default: return 'border-gray-300';
+            }
+        }
+
+        function getStatusBadgeClass(status) {
+            switch (status) {
+                case 'outstanding': return 'bg-orange-100 text-orange-800';
+                case 'in-process': return 'bg-blue-100 text-blue-800';
+                case 'complete': return 'bg-green-100 text-green-800';
+                default: return 'bg-gray-200 text-gray-800';
+            }
+        }
+
+        function renderJobs(jobs) {
+            jobsContainer.innerHTML = '';
+            jobs.forEach(job => {
+                const card = createJobCard(job);
+                jobsContainer.appendChild(card);
+            });
+        }
+
+        // Firestore Logic
+        function startRealtimeListener() {
+            if (!authReady || !db) {
+                console.error("Firebase not ready for listener.");
+                return;
+            }
+
+            const jobsRef = collection(db, `artifacts/${appId}/public/data/jobs`);
+            onSnapshot(jobsRef, (snapshot) => {
+                const jobs = [];
+                snapshot.forEach(doc => {
+                    jobs.push({ id: doc.id, ...doc.data() });
+                });
+                renderJobs(jobs);
+            }, (error) => {
+                console.error("Error listening to jobs:", error);
+                showMessageModal("Failed to load jobs. Please check your internet connection.");
+            });
+        }
+
+        async function saveJob(jobData, jobId = null) {
+            if (!authReady) {
+                showMessageModal("Application is not authenticated. Please wait and try again.");
+                return;
+            }
+            try {
+                const jobsRef = collection(db, `artifacts/${appId}/public/data/jobs`);
+                if (jobId) {
+                    const jobDocRef = doc(jobsRef, jobId);
+                    await setDoc(jobDocRef, jobData);
+                    console.log("Job updated with ID: ", jobId);
+                } else {
+                    const docRef = await addDoc(jobsRef, jobData);
+                    console.log("Job added with ID: ", docRef.id);
+                }
+                hideModal();
+            } catch (e) {
+                console.error("Error adding/updating document: ", e);
+                showMessageModal("Failed to save job. Please try again.");
+            }
+        }
+
+        async function updateStatus(jobId, newStatus) {
+            if (!authReady) {
+                showMessageModal("Application is not authenticated. Please wait and try again.");
+                return;
+            }
+            try {
+                const jobDocRef = doc(db, `artifacts/${appId}/public/data/jobs`, jobId);
+                const statusUpdate = {
+                    status: newStatus,
+                    timestamp: Timestamp.now()
+                };
+                await setDoc(jobDocRef, {
+                    status: newStatus,
+                    statusHistory: statusUpdate
+                }, { merge: true });
+                console.log("Status updated for job:", jobId);
+            } catch (e) {
+                console.error("Error updating status:", e);
+                showMessageModal("Failed to update status. Please try again.");
+            }
+        }
+
+        // Event Listeners
+        addJobBtn.addEventListener('click', () => {
+            showModal('Add New Job');
+        });
+
+        closeModalBtn.addEventListener('click', hideModal);
+
+        closeMessageBtn.addEventListener('click', hideMessageModal);
+
+        modalBackdrop.addEventListener('click', (e) => {
+            if (e.target.id === 'modal-backdrop') {
+                hideModal();
+            }
+        });
+
+        jobForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const newJob = {
+                dueDate: dueDateInput.value,
+                description: descriptionInput.value,
+                assignee: assigneeInput.value,
+                contactName: contactNameInput.value,
+                contactNumber: contactNumberInput.value,
+                email: emailInput.value,
+                address: addressInput.value,
+                status: 'outstanding',
+                statusHistory: [{
+                    status: 'outstanding',
+                    timestamp: Timestamp.now()
+                }]
+            };
+
+            saveJob(newJob);
+        });
+
+        jobsContainer.addEventListener('change', (e) => {
+            if (e.target.classList.contains('status-select')) {
+                const selectElement = e.target;
+                const newStatus = selectElement.value;
+                const jobId = selectElement.closest('[data-id]').dataset.id;
+                updateStatus(jobId, newStatus);
+            }
+        });
+    </script>
+</body>
+</html>
