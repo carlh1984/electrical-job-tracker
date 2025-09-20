@@ -120,8 +120,16 @@
 
         // Firebase Initialization and Authentication
         setLogLevel('Debug');
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = 'electrical-job-tracker';
+        const firebaseConfig = {
+          apiKey: "AIzaSyBfTJfTk7nO6VItpIWAGnKxpJVR7_NtSKs",
+          authDomain: "electrical-job-tracker.firebaseapp.com",
+          projectId: "electrical-job-tracker",
+          storageBucket: "electrical-job-tracker.firebasestorage.app",
+          messagingSenderId: "12155180262",
+          appId: "1:12155180262:web:218c884d42032ef6d15727",
+          measurementId: "G-EYGXXLTB93"
+        };
 
         let app;
         let db;
@@ -140,21 +148,11 @@
                     userId = user.uid;
                     document.getElementById('user-id-display').textContent = `User ID: ${userId}`;
                     authReady = true;
+                    console.log("Authentication successful, user ID:", userId);
                     startRealtimeListener();
                 } else {
-                    console.log('User is signed out.');
-                    // Try to sign in anonymously or with custom token if available
-                    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                    try {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    } catch (error) {
-                        console.error("Error signing in:", error);
-                        showMessageModal("Authentication failed. Please refresh the page.");
-                    }
+                    console.log('User is signed out. Signing in anonymously...');
+                    await signInAnonymously(auth);
                 }
             });
         } catch (e) {
