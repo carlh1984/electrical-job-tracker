@@ -115,7 +115,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, addDoc, setDoc, onSnapshot, collection, query, where, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, addDoc, setDoc, updateDoc, getDoc, onSnapshot, collection, query, where, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Firebase Initialization and Authentication
@@ -219,7 +219,7 @@
             card.className = 'bg-white rounded-xl shadow-md p-6 border-l-4 ' + getStatusColorClass(job.status);
             card.dataset.id = job.id;
 
-            const statusUpdatesHtml = job.statusHistory.map(history => {
+            const statusUpdatesHtml = (Array.isArray(job.statusHistory) ? job.statusHistory : []).map(history => {
                 const timestamp = formatTimestamp(history.timestamp);
                 return `<p class="text-xs text-gray-500 mt-1">${timestamp}: ${history.status}</p>`;
             }).join('');
@@ -311,7 +311,7 @@
                 const jobsRef = collection(db, `artifacts/${appId}/public/data/jobs`);
                 if (jobId) {
                     const jobDocRef = doc(jobsRef, jobId);
-                    await setDoc(jobDocRef, jobData);
+                    await updateDoc(jobDocRef, jobData);
                     console.log("Job updated with ID: ", jobId);
                 } else {
                     const docRef = await addDoc(jobsRef, jobData);
@@ -331,14 +331,31 @@
             }
             try {
                 const jobDocRef = doc(db, `artifacts/${appId}/public/data/jobs`, jobId);
+                
+                // Fetch the current job to get the existing status history
+                const jobDoc = await getDoc(jobDocRef);
+                if (!jobDoc.exists()) {
+                    console.error("Job document not found.");
+                    return;
+                }
+                const jobData = jobDoc.data();
+                
+                // Get the existing history, or an empty array if it doesn't exist or isn't an array
+                const statusHistory = Array.isArray(jobData.statusHistory) ? jobData.statusHistory : [];
+
+                // Add the new status to the history array
                 const statusUpdate = {
                     status: newStatus,
                     timestamp: Timestamp.now()
                 };
-                await setDoc(jobDocRef, {
+                statusHistory.push(statusUpdate);
+
+                // Update the document with the new status and the full history
+                await updateDoc(jobDocRef, {
                     status: newStatus,
-                    statusHistory: statusUpdate
-                }, { merge: true });
+                    statusHistory: statusHistory
+                });
+
                 console.log("Status updated for job:", jobId);
             } catch (e) {
                 console.error("Error updating status:", e);
