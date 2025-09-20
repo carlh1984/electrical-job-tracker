@@ -32,15 +32,31 @@
             <div id="auth-status" class="text-gray-500 text-sm">
                 <span id="user-id-display" class="font-medium">Loading user...</span>
             </div>
-            <button id="add-job-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-colors duration-300">
-                + Add New Job
-            </button>
+            <div class="flex space-x-2">
+                <button id="add-job-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-colors duration-300">
+                    + Add New Job
+                </button>
+                <button id="view-toggle-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg transition-colors duration-300">
+                    View Archived Jobs
+                </button>
+            </div>
         </header>
 
-        <!-- Job List Container -->
-        <div id="jobs-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <!-- Job cards will be dynamically inserted here -->
+        <!-- Main Content Area -->
+        <div id="active-jobs-view">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Active Jobs</h2>
+            <div id="jobs-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Active job cards will be dynamically inserted here -->
+            </div>
         </div>
+
+        <div id="archived-jobs-view" class="hidden">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Archived Jobs</h2>
+            <div id="archived-jobs-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Archived job cards will be dynamically inserted here -->
+            </div>
+        </div>
+
 
         <!-- Add/Edit Job Modal -->
         <div id="modal-backdrop" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center transition-opacity duration-300 opacity-0">
@@ -140,6 +156,7 @@
         let userId = null;
 
         let authReady = false;
+        let currentView = 'active';
 
         try {
             app = initializeApp(firebaseConfig);
@@ -159,17 +176,21 @@
                 }
             });
         } catch (e) {
-            console.error("Error initializing Firebase:", e);
-            showMessageModal("Failed to initialize the application. Please check the console for details.");
-        }
+                console.error("Error initializing Firebase:", e);
+                showMessageModal("Failed to initialize the application. Please check the console for details.");
+            }
 
 
         // UI Elements
         const addJobBtn = document.getElementById('add-job-btn');
+        const viewToggleBtn = document.getElementById('view-toggle-btn');
         const modalBackdrop = document.getElementById('modal-backdrop');
         const closeModalBtn = document.getElementById('close-modal-btn');
         const jobForm = document.getElementById('job-form');
+        const activeJobsView = document.getElementById('active-jobs-view');
+        const archivedJobsView = document.getElementById('archived-jobs-view');
         const jobsContainer = document.getElementById('jobs-container');
+        const archivedJobsContainer = document.getElementById('archived-jobs-container');
         const modalTitle = document.getElementById('modal-title');
         const jobIdInput = document.getElementById('job-id-input');
         const messageModal = document.getElementById('message-modal');
@@ -229,6 +250,12 @@
 
             const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.address)}`;
 
+            // Conditionally show archive button
+            const archiveButtonHtml = job.status === 'complete' ? `
+                <button class="archive-btn bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-2 rounded-lg text-sm transition-colors duration-300">
+                    Archive Job
+                </button>` : '';
+
             card.innerHTML = `
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
                     <h3 class="text-xl font-bold text-gray-800">${job.assignee}</h3>
@@ -267,6 +294,7 @@
                     <button class="complete-btn bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-2 rounded-lg text-sm transition-colors duration-300 ${job.timeCompleted ? 'opacity-50 cursor-not-allowed' : ''}" ${job.timeCompleted ? 'disabled' : ''}>
                         Complete Job
                     </button>
+                    ${archiveButtonHtml}
                 </div>
             `;
             return card;
@@ -290,11 +318,11 @@
             }
         }
 
-        function renderJobs(jobs) {
-            jobsContainer.innerHTML = '';
+        function renderJobs(jobs, container) {
+            container.innerHTML = '';
             jobs.forEach(job => {
                 const card = createJobCard(job);
-                jobsContainer.appendChild(card);
+                container.appendChild(card);
             });
         }
 
@@ -305,16 +333,28 @@
                 return;
             }
 
-            const jobsRef = collection(db, `artifacts/${appId}/public/data/jobs`);
-            onSnapshot(jobsRef, (snapshot) => {
+            const activeJobsQuery = query(collection(db, `artifacts/${appId}/public/data/jobs`), where('isArchived', '==', false));
+            onSnapshot(activeJobsQuery, (snapshot) => {
                 const jobs = [];
                 snapshot.forEach(doc => {
                     jobs.push({ id: doc.id, ...doc.data() });
                 });
-                renderJobs(jobs);
+                renderJobs(jobs, jobsContainer);
             }, (error) => {
-                console.error("Error listening to jobs:", error);
-                showMessageModal("Failed to load jobs. Please check your internet connection.");
+                console.error("Error listening to active jobs:", error);
+                showMessageModal("Failed to load active jobs. Please check your internet connection.");
+            });
+
+            const archivedJobsQuery = query(collection(db, `artifacts/${appId}/public/data/jobs`), where('isArchived', '==', true));
+            onSnapshot(archivedJobsQuery, (snapshot) => {
+                const jobs = [];
+                snapshot.forEach(doc => {
+                    jobs.push({ id: doc.id, ...doc.data() });
+                });
+                renderJobs(jobs, archivedJobsContainer);
+            }, (error) => {
+                console.error("Error listening to archived jobs:", error);
+                showMessageModal("Failed to load archived jobs. Please check your internet connection.");
             });
         }
 
@@ -330,7 +370,7 @@
                     await updateDoc(jobDocRef, jobData);
                     console.log("Job updated with ID: ", jobId);
                 } else {
-                    const docRef = await addDoc(jobsRef, jobData);
+                    const docRef = await addDoc(jobsRef, { ...jobData, isArchived: false });
                     console.log("Job added with ID: ", docRef.id);
                 }
                 hideModal();
@@ -396,10 +436,40 @@
             }
         }
 
+        async function archiveJob(jobId) {
+            if (!authReady) {
+                showMessageModal("Application is not authenticated. Please wait and try again.");
+                return;
+            }
+            try {
+                const jobDocRef = doc(db, `artifacts/${appId}/public/data/jobs`, jobId);
+                await updateDoc(jobDocRef, { isArchived: true });
+                showMessageModal("Job successfully archived.");
+            } catch (e) {
+                console.error("Error archiving job:", e);
+                showMessageModal("Failed to archive job. Please try again.");
+            }
+        }
+
+
         // Event Listeners
         addJobBtn.addEventListener('click', () => {
             jobIdInput.value = '';
             showModal('Add New Job');
+        });
+        
+        viewToggleBtn.addEventListener('click', () => {
+            if (currentView === 'active') {
+                activeJobsView.classList.add('hidden');
+                archivedJobsView.classList.remove('hidden');
+                viewToggleBtn.textContent = 'View Active Jobs';
+                currentView = 'archived';
+            } else {
+                activeJobsView.classList.remove('hidden');
+                archivedJobsView.classList.add('hidden');
+                viewToggleBtn.textContent = 'View Archived Jobs';
+                currentView = 'active';
+            }
         });
 
         closeModalBtn.addEventListener('click', hideModal);
@@ -471,6 +541,9 @@
             } else if (e.target.classList.contains('complete-btn')) {
                 const jobId = e.target.closest('[data-id]').dataset.id;
                 updateJobTime(jobId, 'timeCompleted');
+            } else if (e.target.classList.contains('archive-btn')) {
+                const jobId = e.target.closest('[data-id]').dataset.id;
+                archiveJob(jobId);
             }
         });
 
@@ -482,6 +555,14 @@
                 updateStatus(jobId, newStatus);
             }
         });
+
+        archivedJobsContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('archive-btn')) {
+                const jobId = e.target.closest('[data-id]').dataset.id;
+                archiveJob(jobId);
+            }
+        });
+
     </script>
 </body>
 </html>
